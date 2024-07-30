@@ -1,0 +1,44 @@
+# C++ ignores
+*.o
+*.out
+*.exe
+*.dll
+*.so
+*.dylib
+
+# Python ignores
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Web ignores
+node_modules/
+bower_components/
+*.log
+
+# IDE ignores
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS ignores
+.DS_Store
+Thumbs.db
