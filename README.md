@@ -1,5 +1,14 @@
 # NexusDB
-NexusDB is a sophisticated multi-model database system designed to support both relational and document-based data.
+NexusDB is a sophisticated multi-model database system designed to support both relational and document-based data models. It aims to provide a flexible, high-performance solution for modern data management needs.
+
+## Features
+
+- Dual support for relational and document-based data models
+- High-performance C++ core engine
+- Python Flask application layer for easy integration
+- Web-based management interface
+- ACID compliance
+- Advanced indexing and query optimization
 
 ## Project Structure
 - `core/`: C/C++ core database engine
@@ -12,85 +21,82 @@ NexusDB is a sophisticated multi-model database system designed to support both 
 Note: Common scripts and resources are located in the separate NexusDB-Common repository.
 
 ## Getting Started
-Follow these steps to set up your development environment for NexusDB:
+
+### Prerequisites
+
+1. CMake 3.10 or higher
+2. C++17 compatible compiler
+3. Python 3.7 or higher
+4. Node.js and npm (for web interface)
+
+### Building the Core Engine
 
 1. Clone the repository:
 ```bash
-git clone https://github.com/your-username/NexusDB-Main.git
-cd NexusDB-Main
+git clone https://github.com/sahild91/NexusDB.git
+cd NexusDB
 ```
 
-2. Set up the submodule for common resources:
+2. Build the project:
 ```bash
-git submodule update --init --recursive
+mkdir build
+cd build
+cmake ..
+cmake --build .
+```
+
+3. Install:
+```bash
+cmake --install .
+```
+
+### Setting up the Python Application
+
+1. Navigate to the app directory:
+```bash
+cd ../app
+```
+
+2. Create a virtual environment and activate it:
+```bash
+python -m venv venv
+source venv/bin/activate  # On Windows, use `venv\Scripts\activate`
 ```
 
 3. Install dependencies:
-
-    - For the core C/C++ engine:
 ```bash
-    cd core
-    ./configure
-    make
+pip install -r requirements.txt
 ```
 
-    - For the Python Flask application:
+4. Run the Flask application:
 ```bash
-    cd app
-    python -m venv venv
-    source venv/bin/activate  # On Windows use `venv\Scripts\activate`
-    pip install -r requirements.txt
+flask run
 ```
 
-    - For the web interface:
+
+### Setting up the Web Interface
+
+1. Navigate to the web directory:
 ```bash
-    cd web
-    npm install
+cd ../web
 ```
 
-4. Set up the database:
+2. Install dependencies:
 ```bash
-cd core
-./setup_database.sh
+npm install
 ```
 
-5. Run the development servers:
-
-    - For the core engine:
+3. Start the development server:
 ```bash
-    cd core
-    ./run_engine.sh
+npm start
 ```
 
-    - For the Flask app:
-```bash
-    cd app
-    flask run
-```
 
-    - For the web interface:
-```bash
-    cd web
-    npm start
-```
-
-6. Access the web interface at `http://localhost:3000` and the API at `http://localhost:5000`.
-
-For more detailed instructions, please refer to the `docs/getting_started.md` file.
+## Documentation
+For more detailed information, please refer to the `docs/` directory or visit our online documentation.
 
 ## Contributing
-
-We welcome contributions to NexusDB! Here's how you can contribute:
-
-1. Fork the repository.
-2. Create a new branch for your feature or bug fix.
-3. Make your changes, ensuring you follow our coding standards (see docs/coding_standards.md).
-4. Write or update tests for your changes.
-5. Run the test suite to ensure all tests pass.
-6. Commit your changes and push to your fork.
-7. Create a pull request with a clear description of your changes.
-
-Please read our `CONTRIBUTING.md` file for more detailed information on our contribution process, coding standards, and community guidelines.
+We welcome contributions to NexusDB! Please see our Contributing Guide for more details on how to get started.
 
 ## License
 NexusDB is licensed under the GNU General Public License v3.0. See the `LICENSE` file in the project root for the full license text.
