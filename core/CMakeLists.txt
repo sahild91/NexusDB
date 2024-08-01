@@ -1,3 +1,17 @@
+
+# Set OpenSSL root directory
+set(OPENSSL_ROOT_DIR "C:/OpenSSL" CACHE PATH "OpenSSL root directory")
+
+# Find OpenSSL package
+find_package(OpenSSL REQUIRED)
+
+if(NOT OPENSSL_FOUND)
+    message(FATAL_ERROR "OpenSSL not found. Please install OpenSSL or set OPENSSL_ROOT_DIR correctly.")
+endif()
+
+message(STATUS "OpenSSL include dir: ${OPENSSL_INCLUDE_DIR}")
+message(STATUS "OpenSSL libraries: ${OPENSSL_LIBRARIES}")
+
 file(GLOB_RECURSE SOURCES "src/*.cpp")
 file(GLOB_RECURSE HEADERS "include/nexusdb/*.h" "include/nexusdb/utils/*.h")
 
@@ -11,13 +25,17 @@ target_include_directories(nexusdb_core
         $<INSTALL_INTERFACE:include>
     PRIVATE
         ${CMAKE_CURRENT_SOURCE_DIR}/src
+        ${OPENSSL_INCLUDE_DIR}  # Add OpenSSL include directory
 )
+
+# Link against OpenSSL
+target_link_libraries(nexusdb_core PRIVATE OpenSSL::Crypto)
 
 # Add executable target for the main application
 add_executable(nexusdb_app src/main.cpp)
 
 # Link the library to the executable
-target_link_libraries(nexusdb_app PRIVATE nexusdb_core)
+target_link_libraries(nexusdb_app PRIVATE nexusdb_core OpenSSL::Crypto)
 
 # Installation rules
 include(GNUInstallDirs)

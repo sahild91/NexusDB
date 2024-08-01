@@ -96,7 +96,7 @@ npm start
 For more detailed information, please refer to the `docs/` directory or visit our online documentation.
 
 ## Contributing
-We welcome contributions to NexusDB! Please see our Contributing Guide for more details on how to get started.
+We welcome contributions to NexusDB! Please see our Contributing Guide[CONTRIBUTING.md] for more details on how to get started.
 
 ## License
 NexusDB is licensed under the GNU General Public License v3.0. See the `LICENSE` file in the project root for the full license text.

@@ -1,22 +1,28 @@
 #ifndef NEXUSDB_CONCURRENCY_MANAGER_H
 #define NEXUSDB_CONCURRENCY_MANAGER_H
 
+#include <string>
+#include <optional>
+#include <mutex>
+#include <unordered_map>
+#include <shared_mutex>
+
 namespace nexusdb {
 
-/// Concurrency Manager class
 class ConcurrencyManager {
 public:
-    /// Constructor
     ConcurrencyManager();
-
-    /// Destructor
     ~ConcurrencyManager();
 
-    /// Initialize the concurrency manager
-    /// @return true if initialization was successful, false otherwise
-    bool initialize();
+    std::optional<std::string> initialize();
+    void shutdown();
 
-    // Add other concurrency-related operations here
+    std::optional<std::string> acquire_lock(const std::string& resource, bool exclusive = false);
+    std::optional<std::string> release_lock(const std::string& resource);
+
+private:
+    std::mutex mutex_;
+    std::unordered_map<std::string, std::shared_mutex> locks_;
 };
 
 } // namespace nexusdb
