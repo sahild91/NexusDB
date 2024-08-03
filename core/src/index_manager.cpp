@@ -38,16 +38,17 @@ std::optional<std::string> IndexManager::create_index(const std::string& table_n
         return "Index already exists for this table and column";
     }
 
-    // Create a new B-tree index
     indexes_[index_key] = std::make_unique<BTree<std::string, std::vector<uint64_t>>>(10); // Degree of 10 as an example
 
-    // Scan the table and build the index
-    // This is a placeholder implementation and should be replaced with actual table scanning logic
-    // storage_engine_->scan_table(table_name, [this, &index_key, &column_name](const Record& record) {
-    //     std::string value = record.get_value(column_name);
-    //     uint64_t record_id = record.get_id();
-    //     insert_into_index(index_key, value, record_id);
-    // });
+    // Populate the index with existing data
+    auto table_scan = storage_engine_->full_table_scan(table_name);
+    if (table_scan.has_value()) {
+        for (const auto& [record_id, record] : *table_scan) {
+            if (column_name < record.size()) {
+                insert_into_index(table_name, column_name, record[std::stoi(column_name)], record_id);
+            }
+        }
+    }
     
     LOG_INFO("Created index for " + table_name + "." + column_name);
     return std::nullopt;
@@ -104,6 +105,29 @@ std::optional<std::string> IndexManager::insert_into_index(const std::string& ta
     return std::nullopt;
 }
 
+std::optional<std::string> IndexManager::remove_from_index(const std::string& table_name, const std::string& column_name, const std::string& value, uint64_t record_id) {
+    std::lock_guard<std::mutex> lock(mutex_);
+    std::string index_key = get_index_key(table_name, column_name);
+    
+    auto it = indexes_.find(index_key);
+    if (it == indexes_.end()) {
+        return "Index does not exist for this table and column";
+    }
+
+    auto search_result = it->second->search(value);
+    if (search_result) {
+        auto& records = *search_result;
+        records.erase(std::remove(records.begin(), records.end(), record_id), records.end());
+        if (records.empty()) {
+            it->second->remove(value);
+        } else {
+            it->second->insert(value, records);
+        }
+    }
+
+    return std::nullopt;
+}
+
 std::optional<std::string> IndexManager::drop_all_indexes(const std::string& table_name) {
     std::lock_guard<std::mutex> lock(mutex_);
     LOG_INFO("Dropping all indexes for table: " + table_name);
@@ -122,8 +146,97 @@ std::optional<std::string> IndexManager::drop_all_indexes(const std::string& tab
     return std::nullopt;
 }
 
+std::optional<std::string> IndexManager::sync_index(const std::string& table_name, const std::string& column_name, const std::string& remote_node) {
+    // This is a placeholder implementation. In a real system, you'd need to implement
+    // network communication and data transfer with the remote node.
+    LOG_INFO("Syncing index for " + table_name + "." + column_name + " with node: " + remote_node);
+    return std::nullopt;
+}
+
+std::optional<std::string> IndexManager::merge_index(const std::string& table_name, const std::string& column_name, const BTree<std::string, std::vector<uint64_t>>& remote_index) {
+    std::lock_guard<std::mutex> lock(mutex_);
+    std::string index_key = get_index_key(table_name, column_name);
+    
+    auto it = indexes_.find(index_key);
+    if (it == indexes_.end()) {
+        return "Index does not exist for this table and column";
+    }
+
+    // Merge the remote index into the local index
+    remote_index.traverse([&](const std::string& key, const std::vector<uint64_t>& remote_records) {
+        auto local_result = it->second->search(key);
+        if (local_result) {
+            std::vector<uint64_t> merged_records = *local_result;
+            resolve_conflicts(merged_records, remote_records);
+            it->second->insert(key, merged_records);
+        } else {
+            it->second->insert(key, remote_records);
+        }
+    });
+
+    LOG_INFO("Merged index for " + table_name + "." + column_name);
+    return std::nullopt;
+}
+
+std::optional<std::string> IndexManager::bulk_load_index(const std::string& table_name, const std::string& column_name, const std::vector<std::pair<std::string, uint64_t>>& data) {
+    std::lock_guard<std::mutex> lock(mutex_);
+    std::string index_key = get_index_key(table_name, column_name);
+    
+    if (indexes_.find(index_key) != indexes_.end()) {
+        return "Index already exists for this table and column";
+    }
+
+    auto new_index = std::make_unique<BTree<std::string, std::vector<uint64_t>>>(10);
+    
+    // Sort the data for efficient bulk loading
+    std::vector<std::pair<std::string, uint64_t>> sorted_data = data;
+    std::sort(sorted_data.begin(), sorted_data.end());
+
+    // Bulk load the index
+    for (const auto& [value, record_id] : sorted_data) {
+        auto search_result = new_index->search(value);
+        if (search_result) {
+            search_result->push_back(record_id);
+            new_index->insert(value, *search_result);
+        } else {
+            new_index->insert(value, {record_id});
+        }
+    }
+
+    indexes_[index_key] = std::move(new_index);
+    
+    LOG_INFO("Bulk loaded index for " + table_name + "." + column_name);
+    return std::nullopt;
+}
+
+std::optional<IndexManager::IndexStats> IndexManager::get_index_stats(const std::string& table_name, const std::string& column_name) {
+    std::lock_guard<std::mutex> lock(mutex_);
+    std::string index_key = get_index_key(table_name, column_name);
+    
+    auto it = indexes_.find(index_key);
+    if (it == indexes_.end()) {
+        return std::nullopt;
+    }
+
+    IndexStats stats;
+    stats.num_entries = it->second->size();
+    stats.height = it->second->height();
+    stats.num_nodes = it->second->node_count();
+
+    return stats;
+}
+
 std::string IndexManager::get_index_key(const std::string& table_name, const std::string& column_name) const {
     return table_name + "." + column_name;
+}
+
+void IndexManager::resolve_conflicts(std::vector<uint64_t>& local_records, const std::vector<uint64_t>& remote_records) {
+    // This is a simple conflict resolution strategy that takes the union of local and remote records
+    std::vector<uint64_t> merged_records;
+    std::set_union(local_records.begin(), local_records.end(),
+                   remote_records.begin(), remote_records.end(),
+                   std::back_inserter(merged_records));
+    local_records = merged_records;
 }
 
 } // namespace nexusdb

@@ -4,14 +4,40 @@
 #include <string>
 #include <fstream>
 #include <mutex>
+#include <vector>
+#include <memory>
 
 namespace nexusdb {
 namespace utils {
 
-/// Logger class for NexusDB
+class LogDestination {
+public:
+    virtual ~LogDestination() = default;
+    virtual void write(const std::string& message) = 0;
+};
+
+class FileLogDestination : public LogDestination {
+public:
+    FileLogDestination(const std::string& filename);
+    void write(const std::string& message) override;
+
+private:
+    std::ofstream file_;
+    std::mutex mutex_;
+};
+
+class NetworkLogDestination : public LogDestination {
+public:
+    NetworkLogDestination(const std::string& host, int port);
+    void write(const std::string& message) override;
+
+private:
+    // Network socket or client would be here
+    std::mutex mutex_;
+};
+
 class Logger {
 public:
-    /// Log levels
     enum class Level {
         DEBUG,
         INFO,
@@ -20,56 +46,39 @@ public:
         FATAL
     };
 
-    /// Get the singleton instance of the logger
-    /// @return Reference to the logger instance
     static Logger& get_instance();
 
-    /// Initialize the logger
-    /// @param log_file Path to the log file
-    /// @param console_output Whether to output logs to console
-    /// @return true if initialization was successful, false otherwise
-    bool initialize(const std::string& log_file, bool console_output = true);
+    void add_destination(std::unique_ptr<LogDestination> destination);
+    void remove_all_destinations();
 
-    /// Log a message
-    /// @param level Log level
-    /// @param message Message to log
+    void set_level(Level level);
+    Level get_level() const;
+
     void log(Level level, const std::string& message);
 
-    /// Convenience method for debug logging
-    /// @param message Message to log
     void debug(const std::string& message);
-
-    /// Convenience method for info logging
-    /// @param message Message to log
     void info(const std::string& message);
-
-    /// Convenience method for warning logging
-    /// @param message Message to log
     void warning(const std::string& message);
-
-    /// Convenience method for error logging
-    /// @param message Message to log
     void error(const std::string& message);
-
-    /// Convenience method for fatal logging
-    /// @param message Message to log
     void fatal(const std::string& message);
 
+    // New methods for distributed logging
+    void log_network_operation(const std::string& operation, const std::string& details);
+    void log_distributed_transaction(uint64_t transaction_id, const std::string& status);
+
 private:
-    Logger() = default;  // Private constructor for singleton
+    Logger();
     ~Logger();
 
     Logger(const Logger&) = delete;
     Logger& operator=(const Logger&) = delete;
 
-    std::ofstream log_file_;
-    bool console_output_ = false;
-    std::mutex mutex_;
+    std::vector<std::unique_ptr<LogDestination>> destinations_;
+    Level current_level_;
+    mutable std::mutex mutex_;
 
-    /// Convert log level to string
-    /// @param level Log level
-    /// @return String representation of the log level
     std::string level_to_string(Level level);
+    std::string get_timestamp() const;
 };
 
 } // namespace utils

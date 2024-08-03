@@ -1,5 +1,4 @@
 #include "nexusdb/query_processor.h"
-#include "nexusdb/storage_engine.h"
 #include "nexusdb/utils/logger.h"
 #include <algorithm>
 #include <cctype>
@@ -38,7 +37,7 @@ std::optional<QueryResult> QueryProcessor::execute_query(const std::string& quer
     
     auto parse_result = parse_query(query);
     if (parse_result.has_value()) {
-        return QueryResult{};  // Return empty result set with error
+        return QueryResult{.error = parse_result};
     }
 
     std::string query_type = query.substr(0, query.find(' '));
@@ -55,12 +54,45 @@ std::optional<QueryResult> QueryProcessor::execute_query(const std::string& quer
         return execute_delete(query);
     } else {
         LOG_ERROR("Unsupported query type: " + query_type);
-        return QueryResult{};  // Return empty result set
+        return QueryResult{.error = "Unsupported query type: " + query_type};
     }
 }
 
+std::optional<QueryResult> QueryProcessor::execute_prepared_statement(const std::shared_ptr<PreparedStatement>& stmt) {
+    std::lock_guard<std::mutex> lock(mutex_);
+    
+    if (!stmt) {
+        return QueryResult{.error = "Invalid prepared statement"};
+    }
+
+    std::string query_type = stmt->get_sql().substr(0, stmt->get_sql().find(' '));
+    std::transform(query_type.begin(), query_type.end(), query_type.begin(), 
+                   [](unsigned char c){ return std::toupper(c); });
+
+    if (query_type == "SELECT") {
+        return execute_prepared_select(*stmt);
+    } else {
+        // Implement other query types as needed
+        LOG_ERROR("Unsupported prepared statement type: " + query_type);
+        return QueryResult{.error = "Unsupported prepared statement type: " + query_type};
+    }
+}
+
+std::optional<QueryResult> QueryProcessor::execute_distributed_query(const std::string& query, ConsistencyLevel consistency_level) {
+    // This is a simplified implementation. In a real system, you'd need to coordinate
+    // with multiple nodes and handle consistency requirements.
+    LOG_INFO("Executing distributed query with consistency level: " + std::to_string(static_cast<int>(consistency_level)));
+    
+    auto distributed_engine = std::dynamic_pointer_cast<DistributedStorageEngine>(storage_engine_);
+    if (!distributed_engine) {
+        return QueryResult{.error = "Not in distributed mode"};
+    }
+
+    return distributed_engine->execute_distributed_query(query, consistency_level);
+}
+
 std::optional<QueryResult> QueryProcessor::execute_select(const std::string& query) {
-    // Basic SELECT query execution
+    // Simplified SELECT query execution
     std::regex select_regex(R"(SELECT\s+(.*?)\s+FROM\s+(\w+)(?:\s+WHERE\s+(.*))?)", std::regex_constants::icase);
     std::smatch matches;
     
@@ -89,11 +121,11 @@ std::optional<QueryResult> QueryProcessor::execute_select(const std::string& que
         return result;
     }
 
-    return QueryResult{};  // Return empty result set if parsing fails
+    return QueryResult{.error = "Invalid SELECT query"};
 }
 
 std::optional<QueryResult> QueryProcessor::execute_insert(const std::string& query) {
-    // Basic INSERT query execution
+    // Simplified INSERT query execution
     std::regex insert_regex(R"(INSERT\s+INTO\s+(\w+)\s+VALUES\s+\((.*?)\))", std::regex_constants::icase);
     std::smatch matches;
     
@@ -115,7 +147,7 @@ std::optional<QueryResult> QueryProcessor::execute_insert(const std::string& que
         auto insert_result = storage_engine_->insert_record(table_name, record);
         if (insert_result.has_value()) {
             LOG_ERROR("Insert failed: " + insert_result.value());
-            return QueryResult{};  // Return empty result set
+            return QueryResult{.error = "Insert failed: " + insert_result.value()};
         }
 
         QueryResult result;
@@ -124,19 +156,21 @@ std::optional<QueryResult> QueryProcessor::execute_insert(const std::string& que
         return result;
     }
 
-    return QueryResult{};  // Return empty result set if parsing fails
+    return QueryResult{.error = "Invalid INSERT query"};
 }
 
 std::optional<QueryResult> QueryProcessor::execute_update(const std::string& query) {
-    // Basic UPDATE query execution (placeholder)
+    // Implement UPDATE query execution
     LOG_INFO("Executing UPDATE query: " + query);
-    return QueryResult{};
+    // Add implementation here
+    return QueryResult{.error = "UPDATE query execution not implemented"};
 }
 
 std::optional<QueryResult> QueryProcessor::execute_delete(const std::string& query) {
-    // Basic DELETE query execution (placeholder)
+    // Implement DELETE query execution
     LOG_INFO("Executing DELETE query: " + query);
-    return QueryResult{};
+    // Add implementation here
+    return QueryResult{.error = "DELETE query execution not implemented"};
 }
 
 std::optional<std::string> QueryProcessor::parse_query(const std::string& query) {
@@ -146,6 +180,18 @@ std::optional<std::string> QueryProcessor::parse_query(const std::string& query)
         return "Invalid query format";
     }
     return std::nullopt;  // Parsing successful
+}
+
+std::optional<QueryResult> QueryProcessor::execute_prepared_select(const PreparedStatement& stmt) {
+    // Implement prepared SELECT statement execution
+    // This is a placeholder implementation
+    LOG_INFO("Executing prepared SELECT statement");
+    
+    QueryResult result;
+    result.column_names = {"column1", "column2"};
+    result.rows = {{"value1", "value2"}, {"value3", "value4"}};
+    
+    return result;
 }
 
 } // namespace nexusdb

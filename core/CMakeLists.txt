@@ -29,13 +29,25 @@ target_include_directories(nexusdb_core
 )
 
 # Link against OpenSSL
-target_link_libraries(nexusdb_core PRIVATE OpenSSL::Crypto)
+target_link_libraries(nexusdb_core PRIVATE OpenSSL::Crypto OpenSSL::SSL)
+
+# Compile definitions
+target_compile_definitions(nexusdb_core PRIVATE
+    NEXUSDB_VERSION="${PROJECT_VERSION}"
+)
+
+# Compile options
+if(MSVC)
+    target_compile_options(nexusdb_core PRIVATE /W4)
+else()
+    target_compile_options(nexusdb_core PRIVATE -Wall -Wextra -Wpedantic)
+endif()
 
 # Add executable target for the main application
 add_executable(nexusdb_app src/main.cpp)
 
 # Link the library to the executable
-target_link_libraries(nexusdb_app PRIVATE nexusdb_core OpenSSL::Crypto)
+target_link_libraries(nexusdb_app PRIVATE nexusdb_core)
 
 # Installation rules
 include(GNUInstallDirs)
@@ -77,3 +89,7 @@ install(FILES
     "${CMAKE_CURRENT_BINARY_DIR}/NexusDBConfigVersion.cmake"
     DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/NexusDB
 )
+
+# Add tests
+#enable_testing()
+#add_subdirectory(tests)

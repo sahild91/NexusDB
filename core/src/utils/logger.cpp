@@ -1,47 +1,75 @@
+// File: src/utils/logger.cpp
 #include "nexusdb/utils/logger.h"
-#include <iostream>
 #include <chrono>
 #include <iomanip>
 #include <sstream>
+#include <iostream>
 
 namespace nexusdb {
 namespace utils {
+
+FileLogDestination::FileLogDestination(const std::string& filename) {
+    file_.open(filename, std::ios::app);
+    if (!file_.is_open()) {
+        throw std::runtime_error("Failed to open log file: " + filename);
+    }
+}
+
+void FileLogDestination::write(const std::string& message) {
+    std::lock_guard<std::mutex> lock(mutex_);
+    file_ << message << std::endl;
+    file_.flush();
+}
+
+NetworkLogDestination::NetworkLogDestination(const std::string& host, int port) {
+    // Initialize network connection here
+    // For simplicity, we'll just print to cout in this example
+}
+
+void NetworkLogDestination::write(const std::string& message) {
+    std::lock_guard<std::mutex> lock(mutex_);
+    // Send message over network here
+    // For simplicity, we'll just print to cout in this example
+    std::cout << "Network Log: " << message << std::endl;
+}
 
 Logger& Logger::get_instance() {
     static Logger instance;
     return instance;
 }
 
-bool Logger::initialize(const std::string& log_file, bool console_output) {
-    console_output_ = console_output;
-    log_file_.open(log_file, std::ios::app);
-    return log_file_.is_open();
+Logger::Logger() : current_level_(Level::INFO) {}
+
+Logger::~Logger() = default;
+
+void Logger::add_destination(std::unique_ptr<LogDestination> destination) {
+    std::lock_guard<std::mutex> lock(mutex_);
+    destinations_.push_back(std::move(destination));
 }
 
-Logger::~Logger() {
-    if (log_file_.is_open()) {
-        log_file_.close();
-    }
+void Logger::remove_all_destinations() {
+    std::lock_guard<std::mutex> lock(mutex_);
+    destinations_.clear();
+}
+
+void Logger::set_level(Level level) {
+    std::lock_guard<std::mutex> lock(mutex_);
+    current_level_ = level;
+}
+
+Logger::Level Logger::get_level() const {
+    std::lock_guard<std::mutex> lock(mutex_);
+    return current_level_;
 }
 
 void Logger::log(Level level, const std::string& message) {
+    if (level < current_level_) return;
+
+    std::string formatted_message = get_timestamp() + " [" + level_to_string(level) + "] " + message;
+
     std::lock_guard<std::mutex> lock(mutex_);
-
-    auto now = std::chrono::system_clock::now();
-    auto now_c = std::chrono::system_clock::to_time_t(now);
-    auto now_tm = std::localtime(&now_c);
-
-    std::ostringstream ss;  // Changed from std::stringstream to std::ostringstream
-    ss << std::put_time(now_tm, "%Y-%m-%d %H:%M:%S")
-       << " [" << level_to_string(level) << "] "
-       << message;
-
-    if (log_file_.is_open()) {
-        log_file_ << ss.str() << std::endl;
-    }
-
-    if (console_output_) {
-        std::cout << ss.str() << std::endl;
+    for (const auto& destination : destinations_) {
+        destination->write(formatted_message);
     }
 }
 
@@ -65,6 +93,16 @@ void Logger::fatal(const std::string& message) {
     log(Level::FATAL, message);
 }
 
+void Logger::log_network_operation(const std::string& operation, const std::string& details) {
+    std::string message = "Network Operation: " + operation + " - " + details;
+    log(Level::INFO, message);
+}
+
+void Logger::log_distributed_transaction(uint64_t transaction_id, const std::string& status) {
+    std::string message = "Distributed Transaction " + std::to_string(transaction_id) + ": " + status;
+    log(Level::INFO, message);
+}
+
 std::string Logger::level_to_string(Level level) {
     switch (level) {
         case Level::DEBUG:   return "DEBUG";
@@ -74,6 +112,17 @@ std::string Logger::level_to_string(Level level) {
         case Level::FATAL:   return "FATAL";
         default:             return "UNKNOWN";
     }
+}
+
+std::string Logger::get_timestamp() const {
+    auto now = std::chrono::system_clock::now();
+    auto now_c = std::chrono::system_clock::to_time_t(now);
+    auto now_ms = std::chrono::duration_cast<std::chrono::milliseconds>(now.time_since_epoch()) % 1000;
+
+    std::stringstream ss;
+    ss << std::put_time(std::localtime(&now_c), "%Y-%m-%d %H:%M:%S");
+    ss << '.' << std::setfill('0') << std::setw(3) << now_ms.count();
+    return ss.str();
 }
 
 } // namespace utils

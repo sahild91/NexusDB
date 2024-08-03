@@ -1,5 +1,6 @@
 #include "nexusdb/query_optimizer.h"
 #include "nexusdb/index_manager.h"
+#include "nexusdb/utils/logger.h"
 #include "nexusdb/schema_manager.h"
 
 namespace nexusdb {
@@ -18,6 +19,7 @@ QueryPlan QueryOptimizer::generate_initial_plan(const std::string& query) {
     // This would involve parsing the query and creating a basic execution plan
     // For simplicity, we'll just create a dummy plan here
     QueryPlan plan;
+    LOG_INFO("Inside generate_initial_plan " + query);
     plan.root = std::make_unique<ScanNode>();
     return plan;
 }

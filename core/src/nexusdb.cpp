@@ -4,24 +4,31 @@
 
 namespace nexusdb {
 
-NexusDB::NexusDB() : is_authenticated_(false) {
-    storage_engine_ = std::make_shared<StorageEngine>();
+NexusDB::NexusDB() : is_authenticated_(false), is_distributed_(false) {
     buffer_manager_ = std::make_unique<BufferManager>();
-    query_processor_ = std::make_unique<QueryProcessor>(storage_engine_);
+    query_processor_ = std::make_unique<QueryProcessor>();
     transaction_manager_ = std::make_unique<TransactionManager>();
-    recovery_manager_ = std::make_unique<RecoveryManager>(storage_engine_);
+    recovery_manager_ = std::make_unique<RecoveryManager>();
     schema_manager_ = std::make_unique<SchemaManager>();
-    index_manager_ = std::make_unique<IndexManager>(storage_engine_);
+    index_manager_ = std::make_unique<IndexManager>();
     concurrency_manager_ = std::make_unique<ConcurrencyManager>();
+    query_cache_ = std::make_unique<QueryCache>(1000); // Default cache size of 1000 queries
 }
 
 NexusDB::~NexusDB() {
     shutdown();
 }
 
-std::optional<std::string> NexusDB::initialize(const std::string& data_directory) {
+std::optional<std::string> NexusDB::initialize(const std::string& data_directory, bool distributed) {
     LOG_INFO("Initializing NexusDB...");
+    is_distributed_ = distributed;
     
+    if (is_distributed_) {
+        storage_engine_ = std::make_shared<DistributedStorageEngine>(StorageConfig());
+    } else {
+        storage_engine_ = std::make_shared<StorageEngine>(StorageConfig());
+    }
+
     auto storage_result = storage_engine_->initialize(data_directory);
     if (storage_result.has_value()) {
         LOG_ERROR("Failed to initialize StorageEngine: " + storage_result.value());
@@ -77,12 +84,6 @@ std::optional<std::string> NexusDB::initialize(const std::string& data_directory
         return system_result;
     }
 
-    // Create admin user if it doesn't exist
-    auto create_admin_result = system_manager_->create_user("admin", "admin_password");
-    if (create_admin_result.has_value()) {
-        LOG_WARNING("Admin user already exists or failed to create: " + create_admin_result.value());
-    }
-    
     LOG_INFO("NexusDB initialized successfully");
     return std::nullopt;
 }
@@ -215,7 +216,154 @@ std::optional<QueryResult> NexusDB::execute_query(const std::string& query) {
         error_result.error = "Not authenticated. Please login first.";
         return error_result;
     }
-    return query_processor_->execute_query(query);
+
+    // Check query cache first
+    auto cached_result = query_cache_->get(query);
+    if (cached_result) {
+        LOG_INFO("Query result retrieved from cache");
+        return *cached_result;
+    }
+
+    auto result = query_processor_->execute_query(query);
+    if (result && !result->error) {
+        // Cache the successful query result
+        query_cache_->insert(query, *result);
+    }
+    return result;
+}
+
+std::optional<std::string> NexusDB::add_node(const std::string& node_address, uint32_t port) {
+    if (!is_distributed_) {
+        return "Not in distributed mode";
+    }
+    auto distributed_engine = std::dynamic_pointer_cast<DistributedStorageEngine>(storage_engine_);
+    return distributed_engine->add_node(node_address, port);
+}
+
+std::optional<std::string> NexusDB::remove_node(const std::string& node_address) {
+    if (!is_distributed_) {
+        return "Not in distributed mode";
+    }
+    auto distributed_engine = std::dynamic_pointer_cast<DistributedStorageEngine>(storage_engine_);
+    return distributed_engine->remove_node(node_address);
+}
+
+std::vector<NodeInfo> NexusDB::get_nodes() const {
+    if (!is_distributed_) {
+        return {};
+    }
+    auto distributed_engine = std::dynamic_pointer_cast<DistributedStorageEngine>(storage_engine_);
+    return distributed_engine->get_nodes();
+}
+
+void NexusDB::set_replication_factor(uint32_t factor) {
+    if (is_distributed_) {
+        auto distributed_engine = std::dynamic_pointer_cast<DistributedStorageEngine>(storage_engine_);
+        distributed_engine->set_replication_factor(factor);
+        LOG_INFO("Replication factor set to " + std::to_string(factor));
+    } else {
+        LOG_WARNING("Attempted to set replication factor in non-distributed mode");
+    }
+}
+
+void NexusDB::set_consistency_level(ConsistencyLevel level) {
+    if (is_distributed_) {
+        auto distributed_engine = std::dynamic_pointer_cast<DistributedStorageEngine>(storage_engine_);
+        distributed_engine->set_consistency_level(level);
+        LOG_INFO("Consistency level set to " + std::to_string(static_cast<int>(level)));
+    } else {
+        LOG_WARNING("Attempted to set consistency level in non-distributed mode");
+    }
+}
+
+std::optional<std::string> NexusDB::start_secure_server(int port, const std::string& cert_file, const std::string& key_file) {
+    try {
+        secure_connection_manager_ = std::make_unique<SecureConnectionManager>(cert_file, key_file);
+        secure_connection_manager_->start_server(port, [this](std::unique_ptr<SecureSocket> socket) {
+            // Handle incoming secure connections
+            // This is where you would implement your protocol for handling database requests over a secure connection
+            LOG_INFO("Secure connection established");
+            // Example: Read a command from the socket
+            auto data = socket->receive();
+            std::string command(data.begin(), data.end());
+            LOG_INFO("Received command: " + command);
+            // Process the command and send a response
+            // This is just a placeholder - you'd implement actual command processing here
+            std::string response = "Command processed: " + command;
+            socket->send(std::vector<unsigned char>(response.begin(), response.end()));
+        });
+        LOG_INFO("Secure server started on port " + std::to_string(port));
+        return std::nullopt;
+    } catch (const std::exception& e) {
+        LOG_ERROR("Failed to start secure server: " + std::string(e.what()));
+        return "Failed to start secure server: " + std::string(e.what());
+    }
+}
+
+std::shared_ptr<PreparedStatement> NexusDB::prepare_statement(const std::string& query) {
+    if (!check_authentication()) {
+        LOG_ERROR("Not authenticated. Please login first.");
+        return nullptr;
+    }
+    try {
+        auto stmt = std::make_shared<PreparedStatement>(query);
+        LOG_INFO("Prepared statement created for query: " + query);
+        return stmt;
+    } catch (const std::exception& e) {
+        LOG_ERROR("Failed to prepare statement: " + std::string(e.what()));
+        return nullptr;
+    }
+}
+
+std::optional<QueryResult> NexusDB::execute_prepared_statement(
+    const std::shared_ptr<PreparedStatement>& stmt,
+    const std::vector<std::variant<int, double, std::string, std::vector<unsigned char>>>& params) {
+    if (!check_authentication()) {
+        QueryResult error_result;
+        error_result.error = "Not authenticated. Please login first.";
+        return error_result;
+    }
+    if (!stmt) {
+        QueryResult error_result;
+        error_result.error = "Invalid prepared statement";
+        return error_result;
+    }
+    try {
+        // Bind parameters to the prepared statement
+        for (size_t i = 0; i < params.size(); ++i) {
+            std::visit([&](auto&& arg) {
+                using T = std::decay_t<decltype(arg)>;
+                if constexpr (std::is_same_v<T, int>)
+                    stmt->bind_param(i, arg);
+                else if constexpr (std::is_same_v<T, double>)
+                    stmt->bind_param(i, arg);
+                else if constexpr (std::is_same_v<T, std::string>)
+                    stmt->bind_param(i, arg);
+                else if constexpr (std::is_same_v<T, std::vector<unsigned char>>)
+                    stmt->bind_param(i, arg);
+            }, params[i]);
+        }
+        
+        // Execute the prepared statement
+        auto result = query_processor_->execute_prepared_statement(stmt);
+        LOG_INFO("Executed prepared statement");
+        return result;
+    } catch (const std::exception& e) {
+        LOG_ERROR("Failed to execute prepared statement: " + std::string(e.what()));
+        QueryResult error_result;
+        error_result.error = "Failed to execute prepared statement: " + std::string(e.what());
+        return error_result;
+    }
+}
+
+void NexusDB::set_query_cache_size(size_t size) {
+    query_cache_ = std::make_unique<QueryCache>(size);
+    LOG_INFO("Query cache size set to " + std::to_string(size));
+}
+
+void NexusDB::enable_encryption(const EncryptionKey& key) {
+    encryptor_ = std::make_unique<Encryptor>(key);
+    LOG_INFO("Encryption enabled");
 }
 
 bool NexusDB::check_authentication() {
