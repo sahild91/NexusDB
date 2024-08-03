@@ -19,20 +19,14 @@ struct NodeInfo {
     bool is_active;
 };
 
-enum class ConsistencyLevel {
-    ONE,
-    QUORUM,
-    ALL
-};
-
 class DistributedStorageEngine : public StorageEngine {
 public:
     DistributedStorageEngine(const StorageConfig& config);
     ~DistributedStorageEngine() override;
 
     // Node management
-    std::optional<std::string> add_node(const std::string& node_address, uint32_t port);
-    std::optional<std::string> remove_node(const std::string& node_address);
+    std::optional<std::string> add_node(const std::string& node_address, uint32_t port) override;
+    std::optional<std::string> remove_node(const std::string& node_address) override;
     std::vector<NodeInfo> get_nodes() const;
 
     // Table operations
@@ -57,7 +51,7 @@ public:
     uint32_t get_replication_factor() const;
 
     // Consistency management
-    void set_consistency_level(ConsistencyLevel level);
+    void set_consistency_level(ConsistencyLevel level) override;
     ConsistencyLevel get_consistency_level() const;
 
     // Data synchronization

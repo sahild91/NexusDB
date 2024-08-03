@@ -1,4 +1,3 @@
-// File: src/audit_logger.cpp
 #include "nexusdb/audit_logger.h"
 #include <fstream>
 #include <mutex>
@@ -13,8 +12,9 @@ namespace nexusdb {
 
 class AuditLogger::AuditLoggerImpl {
 public:
+    using days = std::chrono::duration<int, std::ratio<86400>>;
     AuditLoggerImpl(const std::string& log_file)
-        : log_file_(log_file), retention_period_(std::chrono::days(30)) {
+        : log_file_(log_file), retention_period_(days(30)) {
         log_stream_.open(log_file, std::ios::app);
         if (!log_stream_.is_open()) {
             throw std::runtime_error("Failed to open log file: " + log_file);
@@ -32,9 +32,17 @@ public:
         
         auto now = std::chrono::system_clock::now();
         auto now_c = std::chrono::system_clock::to_time_t(now);
+
+        std::tm local_time;
+
+        #ifdef _WIN32
+        localtime_s(&local_time, &now_c); // Windows-specific version
+        #else
+        localtime_r(&now_c, &local_time); // POSIX version
+        #endif
         
         std::ostringstream oss;
-        oss << std::put_time(std::localtime(&now_c), "%Y-%m-%d %H:%M:%S")
+        oss << std::put_time(&local_time, "%F %T")
             << " | " << event_type_to_string(event_type)
             << " | User: " << user
             << " | " << details
@@ -44,7 +52,7 @@ public:
         log_stream_.flush();
     }
 
-    void set_retention_period(std::chrono::days period) {
+    void set_retention_period(days period) {
         std::lock_guard<std::mutex> lock(mutex_);
         retention_period_ = period;
     }
@@ -58,8 +66,17 @@ public:
         // Generate new log file name
         auto now = std::chrono::system_clock::now();
         auto now_c = std::chrono::system_clock::to_time_t(now);
+
+        std::tm local_time;
+
+        #ifdef _WIN32
+        localtime_s(&local_time, &now_c); // Windows-specific version
+        #else
+        localtime_r(&now_c, &local_time); // POSIX version
+        #endif
+
         std::ostringstream oss;
-        oss << std::put_time(std::localtime(&now_c), "%Y%m%d_%H%M%S");
+        oss << std::put_time(&local_time, "%F %T");
         std::string new_log_file = log_file_ + "." + oss.str();
         
         // Rename current log file
@@ -79,7 +96,7 @@ private:
     std::string log_file_;
     std::ofstream log_stream_;
     std::mutex mutex_;
-    std::chrono::days retention_period_;
+    days retention_period_;
 
     std::string event_type_to_string(AuditEventType event_type) {
         switch (event_type) {
@@ -116,7 +133,7 @@ void AuditLogger::log_event(AuditEventType event_type, const std::string& user, 
     pimpl_->log_event(event_type, user, details);
 }
 
-void AuditLogger::set_retention_period(std::chrono::days period) {
+void AuditLogger::set_retention_period(days period) {
     pimpl_->set_retention_period(period);
 }
 

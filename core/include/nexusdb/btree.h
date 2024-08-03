@@ -29,7 +29,8 @@ private:
     void insert_non_full(BTreeNode<Key, Value>* node, const Key& key, const Value& value);
 
 public:
-    BTree(size_t degree) : degree(degree), root(std::make_unique<BTreeNode<Key, Value>>()) {}
+    BTree(size_t degree) 
+        : root(std::make_unique<BTreeNode<Key, Value>>()), degree(degree) {}
 
     void insert(const Key& key, const Value& value);
     std::optional<Value> search(const Key& key) const;

@@ -26,7 +26,8 @@ public:
                    const std::string& user, 
                    const std::string& details);
 
-    void set_retention_period(std::chrono::days period);
+    using days = std::chrono::duration<int, std::ratio<86400>>;
+    void set_retention_period(days period);
     void rotate_logs();
 
 private:

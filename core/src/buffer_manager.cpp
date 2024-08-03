@@ -3,6 +3,7 @@
 #include <stdexcept>
 #include <algorithm>
 #include <chrono>
+#include <limits>
 
 #ifdef _WIN32
 #include <windows.h>
@@ -198,6 +199,7 @@ void BufferManager::evict_page() {
 
 void BufferManager::write_page_to_disk(const std::string& table_name, uint64_t page_id, const Page& page) {
     // This is a placeholder. In a real implementation, you would write the page to disk.
+    LOG_INFO(std::to_string(page.get_page_id()));
     LOG_INFO("Writing page to disk: " + table_name + ", page_id: " + std::to_string(page_id));
 }
 

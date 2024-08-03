@@ -69,19 +69,16 @@ void BTree<Key, Value>::insert_non_full(BTreeNode<Key, Value>* node, const Key& 
 
 template<typename Key, typename Value>
 std::optional<Value> BTree<Key, Value>::search(const Key& key) const {
-    BTreeNode<Key, Value>* node = root.get();
-    while (node) {
-        int i = 0;
-        while (i < node->keys.size() && key > node->keys[i]) {
-            i++;
+    BTreeNode<Key, Value>* current = root.get();
+    while (current != nullptr) {
+        auto it = std::lower_bound(current->keys.begin(), current->keys.end(), key);
+        if (it != current->keys.end() && *it == key) {
+            return current->values[it - current->keys.begin()];
         }
-        if (i < node->keys.size() && key == node->keys[i]) {
-            return node->values[i];
+        if (current->is_leaf) {
+            return std::nullopt;
         }
-        if (node->is_leaf) {
-            break;
-        }
-        node = node->children[i].get();
+        current = current->children[it - current->keys.begin()].get();
     }
     return std::nullopt;
 }
